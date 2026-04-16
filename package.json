@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "module": "src/index.ts",
+  "bin": {
+    "diff-scope": "./index.ts"
+  },
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun run src/index.ts",

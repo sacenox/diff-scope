@@ -2,6 +2,10 @@
 
 A small terminal git diff viewer built with `cel-tui` and Bun.
 
+## Preview
+
+![diff-scope preview](./preview.png)
+
 ## Current features
 
 - scrollable diff view
@@ -14,6 +18,24 @@ A small terminal git diff viewer built with `cel-tui` and Bun.
 - auto-refresh toggle with `Ctrl+R`
 - adjustable auto-refresh interval with `PageUp` / `PageDown`
 - help/about modal with `?`
+
+## Install locally
+
+Requires [Bun](https://bun.sh) and `git`.
+
+From this repo:
+
+```bash
+bun install
+bun link
+```
+
+Then run it inside any git repo:
+
+```bash
+cd /path/to/git/repo
+diff-scope
+```
 
 ## Run
 
