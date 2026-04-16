@@ -24,15 +24,12 @@ The current app already has:
 - a scrollable git diff view
 - staged and unstaged diff rendering in one snapshot
 - diff highlighting and wrapped long lines
-- a bottom status bar with cwd, branch, and git status summary
+- a bottom status bar with cwd, branch, git status summary, and refresh mode
 - pending-change detection every 5 seconds
 - manual refresh with `r`
+- auto-refresh toggle with `ctrl+r`
+- adjustable auto-refresh interval controls with `pageup` / `pagedown`
 - a help/about modal toggled with `?` and closed with `?` or `Esc`
-
-Not implemented yet:
-
-- auto-refresh toggle
-- adjustable auto-refresh interval controls
 
 ## Commands
 

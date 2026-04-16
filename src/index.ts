@@ -20,12 +20,29 @@ type RepoState = {
   fingerprint: string;
 };
 
+type StatusPillColor =
+  | "color00"
+  | "color01"
+  | "color02"
+  | "color03"
+  | "color04"
+  | "color05"
+  | "color06"
+  | "color07"
+  | "color08";
+
 const APP_NAME = packageJson.name;
 const APP_VERSION = packageJson.version;
 const CHANGE_DETECTION_INTERVAL_MS = 5_000;
+const MIN_AUTO_REFRESH_INTERVAL_SECONDS = 5;
+const MAX_AUTO_REFRESH_INTERVAL_SECONDS = 60;
+const AUTO_REFRESH_STEP_SECONDS = 5;
 const textDecoder = new TextDecoder();
 
 let helpOpen = false;
+let autoRefreshEnabled = false;
+let autoRefreshIntervalSeconds = MIN_AUTO_REFRESH_INTERVAL_SECONDS;
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let displayedState = readRepoState();
 let snapshot = displayedState.snapshot;
 let displayedFingerprint = displayedState.fingerprint;
@@ -243,12 +260,47 @@ function readRepoState(): RepoState {
   };
 }
 
-function refreshSnapshot() {
-  displayedState = readRepoState();
-  snapshot = displayedState.snapshot;
-  displayedFingerprint = displayedState.fingerprint;
+function applyDisplayedState(nextState: RepoState) {
+  displayedState = nextState;
+  snapshot = nextState.snapshot;
+  displayedFingerprint = nextState.fingerprint;
   hasPendingChanges = false;
+}
+
+function refreshSnapshot() {
+  applyDisplayedState(readRepoState());
   cel.render();
+}
+
+function runAutoRefreshTick() {
+  const current = readRepoState();
+
+  if (current.fingerprint === displayedFingerprint) {
+    if (hasPendingChanges) {
+      hasPendingChanges = false;
+      cel.render();
+    }
+    return;
+  }
+
+  applyDisplayedState(current);
+  cel.render();
+}
+
+function syncAutoRefreshTimer() {
+  if (autoRefreshTimer !== null) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+
+  if (!autoRefreshEnabled) {
+    return;
+  }
+
+  autoRefreshTimer = setInterval(
+    runAutoRefreshTick,
+    autoRefreshIntervalSeconds * 1_000,
+  );
 }
 
 function checkForPendingChanges() {
@@ -304,6 +356,86 @@ function renderDiffLine(line: string) {
   ]);
 }
 
+function renderStatusPill(
+  text: string,
+  options: {
+    bgColor: StatusPillColor;
+    fgColor?: StatusPillColor;
+    bold?: boolean;
+  },
+) {
+  return HStack(
+    {
+      bgColor: options.bgColor,
+      fgColor: options.fgColor ?? "color00",
+      padding: { x: 1 },
+    },
+    [Text(text, { bold: options.bold ?? true })],
+  );
+}
+
+function statusSummaryPillColors(statusSummary: string) {
+  if (statusSummary === "clean") {
+    return { bgColor: "color02" as const, fgColor: "color00" as const };
+  }
+
+  if (statusSummary.includes("modified")) {
+    return { bgColor: "color03" as const, fgColor: "color00" as const };
+  }
+
+  if (statusSummary.includes("staged")) {
+    return { bgColor: "color06" as const, fgColor: "color00" as const };
+  }
+
+  if (statusSummary.includes("untracked")) {
+    return { bgColor: "color05" as const, fgColor: "color00" as const };
+  }
+
+  return { bgColor: "color08" as const, fgColor: "color07" as const };
+}
+
+function renderStatusBar() {
+  return HStack(
+    {
+      padding: { x: 1 },
+      bgColor: "color00",
+      fgColor: "color07",
+    },
+    [
+      HStack({ gap: 1 }, [
+        renderStatusPill(snapshot.cwd, {
+          bgColor: "color08",
+          fgColor: "color07",
+          bold: false,
+        }),
+        renderStatusPill(snapshot.branch, {
+          bgColor: "color06",
+          fgColor: "color00",
+        }),
+        renderStatusPill(snapshot.statusSummary, statusSummaryPillColors(snapshot.statusSummary)),
+      ]),
+      Spacer(),
+      HStack({ gap: 1 }, [
+        renderStatusPill(autoRefreshModeLabel(), {
+          bgColor: autoRefreshEnabled ? "color04" : "color08",
+          fgColor: "color07",
+        }),
+        ...(hasPendingChanges
+          ? [
+              renderStatusPill("new changes pending", {
+                bgColor: "color01",
+                fgColor: "color07",
+              }),
+            ]
+          : []),
+        Text("r refresh · ctrl+r auto · ? help · ctrl+q quit", {
+          fgColor: "color08",
+        }),
+      ]),
+    ],
+  );
+}
+
 function renderHelpModal() {
   return VStack(
     {
@@ -324,11 +456,17 @@ function renderHelpModal() {
             bold: true,
             fgColor: "color06",
           }),
+          Text(`Mode: ${autoRefreshModeLabel()}`, {
+            fgColor: "color08",
+          }),
           Text(""),
           Text("Keybinds", { bold: true }),
-          Text("r        refresh snapshot"),
-          Text("? / esc  close help"),
-          Text("ctrl+q   quit"),
+          Text("r         refresh snapshot"),
+          Text("ctrl+r    toggle auto-refresh"),
+          Text("pageup    slower auto-refresh (+5s)"),
+          Text("pagedown  faster auto-refresh (-5s)"),
+          Text("? / esc   close help"),
+          Text("ctrl+q    quit"),
           Text(""),
           Text("Mouse wheel scrolls the diff view.", {
             fgColor: "color08",
@@ -341,6 +479,36 @@ function renderHelpModal() {
 
 function isHelpKey(key: string) {
   return key === "?" || key === "shift+/";
+}
+
+function autoRefreshModeLabel() {
+  return autoRefreshEnabled
+    ? `auto ${autoRefreshIntervalSeconds}s`
+    : `manual (${autoRefreshIntervalSeconds}s)`;
+}
+
+function toggleAutoRefresh() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  syncAutoRefreshTimer();
+  cel.render();
+}
+
+function adjustAutoRefreshInterval(deltaSeconds: number) {
+  const nextInterval = Math.min(
+    MAX_AUTO_REFRESH_INTERVAL_SECONDS,
+    Math.max(
+      MIN_AUTO_REFRESH_INTERVAL_SECONDS,
+      autoRefreshIntervalSeconds + deltaSeconds,
+    ),
+  );
+
+  if (nextInterval === autoRefreshIntervalSeconds) {
+    return;
+  }
+
+  autoRefreshIntervalSeconds = nextInterval;
+  syncAutoRefreshTimer();
+  cel.render();
 }
 
 function handleKeyPress(key: string) {
@@ -358,6 +526,21 @@ function handleKeyPress(key: string) {
   if (isHelpKey(key)) {
     helpOpen = true;
     cel.render();
+    return;
+  }
+
+  if (key === "ctrl+r") {
+    toggleAutoRefresh();
+    return;
+  }
+
+  if (key === "pageup") {
+    adjustAutoRefreshInterval(AUTO_REFRESH_STEP_SECONDS);
+    return;
+  }
+
+  if (key === "pagedown") {
+    adjustAutoRefreshInterval(-AUTO_REFRESH_STEP_SECONDS);
     return;
   }
 
@@ -385,27 +568,7 @@ cel.viewport(() => {
         snapshot.diffLines.map(renderDiffLine),
       ),
       Divider({ fgColor: "color08" }),
-      HStack(
-        {
-          padding: { x: 1 },
-          bgColor: "color07",
-          fgColor: "color00",
-        },
-        [
-          Text(`${snapshot.cwd} · ${snapshot.branch} · ${snapshot.statusSummary}`),
-          Spacer(),
-          ...(hasPendingChanges
-            ? [
-                Text("new changes pending", {
-                  bold: true,
-                  fgColor: "color01",
-                }),
-                Text(" · "),
-              ]
-            : []),
-          Text("r refresh · ? help · ctrl+q quit"),
-        ],
-      ),
+      renderStatusBar(),
     ],
   );
 
