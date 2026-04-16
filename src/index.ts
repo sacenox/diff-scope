@@ -1,4 +1,4 @@
-import { Divider, Spacer } from "@cel-tui/components";
+import { Spacer } from "@cel-tui/components";
 import { HStack, ProcessTerminal, Text, VStack, cel } from "@cel-tui/core";
 import packageJson from "../package.json";
 
@@ -568,7 +568,6 @@ cel.viewport(() => {
         },
         snapshot.diffLines.map(renderDiffLine),
       ),
-      Divider({ fgColor: "color08" }),
       renderStatusBar(),
     ],
   );
