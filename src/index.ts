@@ -40,8 +40,8 @@ const AUTO_REFRESH_STEP_SECONDS = 5;
 const textDecoder = new TextDecoder();
 
 let helpOpen = false;
-let autoRefreshEnabled = false;
-let autoRefreshIntervalSeconds = MIN_AUTO_REFRESH_INTERVAL_SECONDS;
+let autoRefreshEnabled = true;
+let autoRefreshIntervalSeconds = 15;
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let displayedState = readRepoState();
 let snapshot = displayedState.snapshot;
@@ -549,6 +549,7 @@ function handleKeyPress(key: string) {
   }
 }
 
+syncAutoRefreshTimer();
 setInterval(checkForPendingChanges, CHANGE_DETECTION_INTERVAL_MS);
 
 cel.init(new ProcessTerminal());
